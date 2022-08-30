@@ -61,7 +61,7 @@ normed_x = m(x)
 * 对于 NLPer：Batch Normalization 作用于 (batch_size, embed_size(=input_channels), seq_len)，就是***对批次中的所有句子的每个特征通道分别做 Normalization***，同样以 $E(x)$ 的计算为例：
 
 $$
-E(x) = \frac{\sum_{N}\sum_{L}X[n,c,l]}{N*C*L}
+E(x) = \frac{\sum_{N}\sum_{L}X[n,c,l]}{N*L}
 $$
 
 ```python
@@ -69,7 +69,7 @@ $$
 # N = 16, C = 256, L = 72
 x = torch.randn([16, 256, 72])
 # num_features = C
-m = torch.nn.BatchNorm1d(num_features=100)
+m = torch.nn.BatchNorm1d(num_features=256)
 normed_x = m(x)
 ```
 
@@ -115,11 +115,39 @@ normed_x = m(x)
 
 [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html)
 
+### 3. Instance Normalization
+
+一句话概括 Instance Normalization: 
+* **batch_size = 1 的 batch normalization**
+* **input_channel = 1 的 layer normalization**
+
+不过对于 BN 来说，想要效果更好往往需要更大的 batch_size，但是 IN 直接把 batch_size 在计算上视作 1，这在大多数情况下效果都不会很好，除了一些特定的任务，如 style transfer 等
+
+* 对于 CVer，其 $E(x)$ 计算公式如下：
+
+$$
+E(x) = \frac{\sum_{H}\sum_{W}X[n,c,h,w]}{H*W}
+$$
+
+* 对于 NLPer，其 $E(x)$ 计算公式如下：
+
+$$
+E(x) = \frac{\sum_{L}X[n,c,l]}{L}
+$$
+
+### 4. Group Normalization
+
+要使得 BN 效果比较好，一般要尽可能把 batch_size 设置得大一些(≥32)，但是某些情况下这是不能实现的。比如数据本身非常大(视频/高分辨率图片)、网络参数非常多等原因，导致显存不够，这时只能被迫减小 batch_size，这会使得 BN 效果打折扣。Group Normalization(GN) 就是这样一种方法，让 norm 不依赖于 batch_size (一种特殊的 LN)
+
+前面提到 IN 等于 input_channel = 1 的 layer normalization，GN 也可以看作是 IN 和 LN 的一个折中办法，他在 input_channel 维度上对 input_channel 分组，然后每个组分别做 normalization。其中分组数 G 为预先定义好的超参数，当 G = 1 时，GN = LN；当 G = C 时，GN = IN
+
+## 使用场景
+
 ### 为什么 NLP 常用 LN 而不用 BN？
 
 在 NLP 任务中，**序列的长度大小是不相等的**，这就意味着如果我们用 Batch Normalization 处理序列的话，就会**对序列填充的 pad 也进行特征对齐**；其次，不同句子的同一个位置的单词是任意的，对这些同一个位置的单词做 Norm 也是没有意义的。
 
-[为什么 transformer 使用 LN 而不是 BN](https://www.zhihu.com/question/487766088)
+### [为什么 transformer 使用 LN 而不是 BN](https://www.zhihu.com/question/487766088)
 
 ***
 
@@ -129,6 +157,9 @@ normed_x = m(x)
 * LN 适合处理变长数据，它与批次大小和句子长度都无关，只在特征维度上计算
 * BN 推理速度更快，它可以直接使用 training mean 和 training variance
 
-## 什么时候需要 Norm 什么时候不需要 Norm
+### 什么时候需要 Norm 什么时候不需要 Norm
 
 [什么时候需要 Norm 什么时候不需要 Norm](https://www.cnblogs.com/shine-lee/p/11779514.html)
+
+***
+
