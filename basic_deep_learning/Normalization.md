@@ -5,14 +5,14 @@
 归一化 / 标准化都是对数据做变换的方式，将原始的一列数据转换到某个范围，或者某种形态。具体来说：
 
 * 归一化：将数据映射到某个固定区间，通常是 [0, 1]
-* 标准化：将原数据分布转变为均值为 0，方差为 1 分布，**原分布类型不变(并非一定是正态分布)**
+* 标准化：将原数据分布转变为均值为 0，方差为 1 分布，**原分布类型不变(并非一定是正态分s布)**
 
 上述两种方法虽有差异，但在特征工程、机器学习、深度学习中都有应用，主要有以下几点好处：
 
 1. **消除不同特征之间量纲的影响**，一方面保证了不同特征之间的可比性，另一方面机器学习任务中常常会出现距离的计算，距离的计算依赖于量纲较大的那些特征，不消除量纲很容易得到不合理的结果
 2. 深度学习方法通常使用梯度下降法进行优化，归一化 / 标准化可以**加快收敛速度**。归一化 / 标准化后的损失函数的等高线图更接近圆形，梯度下降的方向震荡更小，收敛更快，如下图所示(图片来自Andrew Ng)
 
-![img](../images/basic_deep_learning/Normalization_speed_up_convergence.png)
+![img](../assets/basic_deep_learning/Normalization_speed_up_convergence.png)
 
 * ***何时使用归一化，何时使用标准化？***
   * 标准化：在机器学习中，标准化是更加通用的手段，一般而言都可以优先考虑使用标准化
@@ -20,9 +20,12 @@
 
 ## 深度学习常用方法
 
-<center><img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="../images/basic_deep_learning/common_normalization.png">    <br>    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">Image Credits: <a href="https://arxiv.org/abs/1903.10520">[Siyuan Qiao et al.: Weight Standardization]</a></div> </center>
+<center><img style="border-radius: 0.3125em;    box-shadow: 0 2px 4px 0 rgba(34,36,38,.12),0 2px 10px 0 rgba(34,36,38,.08);"     src="../assets/basic_deep_learning/common_normalization.png">    <br>    <div style="color:orange; border-bottom: 1px solid #d9d9d9;    display: inline-block;    color: #999;    padding: 2px;">Image Credits: <a href="https://arxiv.org/abs/1903.10520">[Siyuan Qiao et al.: Weight Standardization]</a></div> </center>
 
-上面这幅图是在十分经典的描述了各种常见 Norm 方法的示意图，这幅图对于 CVer 比较友好，CV 的输入维度通常为 `(batch_size, input_channels, height, width)`，但并不符合 NLPer 的直觉，NLP 的输入(经过了 embedding)维度通常为 `(batch_size, seq_len, embed_size)`，NLP 的输入本身是没有 channel 这个概念的，但是也可以通过类比的方法得到 channel 这个概念 -> CV channel 表示一幅图的颜色通道，**那类似的，NLP channel 则可以表示一个 token 的特征通道**，因此**用 channel 含义来表示 NLP 输入维度为 `(batch_size, embed_size(=input_channels), seq_len)`**，经典的 [textCNN](https://arxiv.org/abs/1408.5882) 用的就是这样的表示方法。因此，对于下面每一个 Normalizaiton 都将分别给出符合 CVer 直觉和符合 NLPer 直觉的方式。
+上面这幅图是在十分经典的描述了各种常见 Norm 方法的示意图，这幅图对于 CVer 比较友好，CV 的输入维度通常为 `(batch_size, input_channels, height, width)`，但并不符合 NLPer 的直觉，NLP 的输入(经过了 embedding)维度通常为 `(batch_size, seq_len, embed_size)`，因此在这里通常存在令人困惑的两种情况：
+
+1. **在概念上依然使用 (N, L(=C), H(=H, W)) 来理解 BN、LN、IN、GN**
+2. 但实际使用中常常会使用如下输入维度：NLP 的输入本身是没有 channel 这个概念的，但是也可以通过类比的方法得到 channel 这个概念 -> CV channel 表示一幅图的颜色通道，**那类似的，NLP channel 则可以表示一个 token 的特征通道**，因此**用 channel 含义来表示 NLP 输入维度为 `(batch_size, embed_size(=input_channels), seq_len)`**，经典的 [textCNN](https://arxiv.org/abs/1408.5882) 用的就是这样的表示方法。
 
 此外，深度学习中的 Normalization 一般都指标准化，公式如下所示：
 
@@ -35,7 +38,14 @@ $$
 * $\epsilon$ 为一个很小的数，通常为 1e-5，用于防止分母为 0，确保数值稳定性
 * $\gamma$ 和 $\beta$ 为可学习的仿射参数，分别用于修正标准化后数据的方差和均值，初始时 $\gamma=1$，$\beta=0$。
 
-不同的标准化方法最大的区别，是上述公式中均值和方差的计算对象不同。
+***不同的标准化方法最大的区别，是上述公式中均值和方差的计算对象不同。***
+
+根据上面四幅图，我们可以发现：
+
+* BN 会得到 channels 组均值方差
+* LN 会得到 batch_size 组均值方差
+* IN 会得到 batch_size * channels 组均值方差
+* GN 会得到 batch_size * channels / G 组均值方差
 
 ### 1. Batch Normalization
 
@@ -65,7 +75,7 @@ E(x) = \frac{\sum_{N}\sum_{L}X[n,c,l]}{N*L}
 $$
 
 ```python
-# pytorch 实现
+# pytorch 实现，torch.nn.BatchNorm1d 的文档中提到了第二维是 features 而不是 seq_len
 # N = 16, C = 256, L = 72
 x = torch.randn([16, 256, 72])
 # num_features = C
@@ -77,9 +87,9 @@ normed_x = m(x)
 
 ### 2. Layer Normalization
 
-Layer Normalization 指在特征维度做 Normalization，其针对的是 **batch 中的某一个句子 / 图片**。LN 在 NLP 领域应用多，在 CV 领域应用少。
+Layer Normalization 指在特征维度做 Normalization，其针对的是 **batch 中的某一个句子(通常在 NLP 中是一个 token ) / 图片**。LN 在 NLP 领域应用多，在 CV 领域应用少。
 
-* 对于 NLPer，Layer Normalization 作用于 (batch_size, seq_len, embed_size) 就是对批次中的一条句子的每个 token 分别做 Normalization，其 $E(x)$ 计算公式如下：
+* 对于 NLPer，Layer Normalization 作用于 (batch_size, seq_len, embed_size) 就是对批次中的一条句子的每个 token 分别做 Normalization，其 $E(x)$ 计算公式如下：(严格意义上，这其实是 Instance Norm)
 
 $$
 E(x) = \frac{\sum_{H}X[n,l,h]}{H}
@@ -96,6 +106,9 @@ x = torch.randn(16, 72, 256)
 # normalized_shape = H
 m = torch.nn.LayerNorm(256)
 normed_x = m(x)
+# 这也是 pytorch 官方给的例子，但是其实仔细琢磨你会发现，上面的例子其实是 Instance Norm
+# 因为这样会得到 batch_size * seq_len 个均值和方差，但 LN 的定义只会得到 batch_size 个均值方差
+# 这也是非常让人困惑的地方，包括 bert 中的 LN，用的实际上都是 IN，但是说的都是 LN...
 ```
 
 * 对于 CVer，Layer Normalizaiton 作用于 (batch_size, input_channels, height, width) 是对批次内的每张图片(例如包括所有通道)分别做 Normalization，其 $E(x)$ 计算公式如下：
