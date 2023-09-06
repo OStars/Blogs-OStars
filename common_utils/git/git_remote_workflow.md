@@ -44,7 +44,7 @@ git config --local user.email $EMAIL
 
 * 因为有本地工作内容了，所以不需要勾选 `ADD a README file`，此项勾选适用于先创建远程仓库，然后本地 `git clone` 远程仓库后再进行本地开发
 
-![create_remote_repository](../images/git/create_remote_repository.png)
+![create_remote_repository](./assets/create_remote_repository.png)
 
 3. 将本地库与远程库联系起来
 
