@@ -5,7 +5,7 @@
 归一化 / 标准化都是对数据做变换的方式，将原始的一列数据转换到某个范围，或者某种形态。具体来说：
 
 * 归一化：将数据映射到某个固定区间，通常是 [0, 1]
-* 标准化：将原数据分布转变为均值为 0，方差为 1 分布，**原分布类型不变(并非一定是正态分s布)**
+* 标准化：将原数据分布转变为均值为 0，方差为 1 分布，**原分布类型不变(并非一定是正态分布)**
 
 上述两种方法虽有差异，但在特征工程、机器学习、深度学习中都有应用，主要有以下几点好处：
 
@@ -154,9 +154,41 @@ $$
 
 前面提到 IN 等于 input_channel = 1 的 layer normalization，GN 也可以看作是 IN 和 LN 的一个折中办法，他在 input_channel 维度上对 input_channel 分组，然后每个组分别做 normalization。其中分组数 G 为预先定义好的超参数，当 G = 1 时，GN = LN；当 G = C 时，GN = IN
 
+### 5. Root Mean Square Layer Normalization (RMS Norm)
+
+和 layernorm 的思路一样，都是在特征维度上做归一化，但是它**去除了减均值的操作，改为直接除以平方和均值开根号**，部分实验结果表示这样对性能没什么影响(甚至略有提升)，同时可以提升计算效率，因为减均值尤其是方差的计算更复杂，Gopher、LLaMA、T5等大语言模型都采用了RMS norm。
+$$
+y = \frac{x}{RMS(x)}*\gamma+\beta, \qquad where\quad RMS(x) = \sqrt{\frac{1}{n}*\sum_{i=1}^{n}x_i^2}
+$$
+
+### 6. Deep Norm
+
+[Deep Norm](https://arxiv.org/pdf/2203.00555.pdf) 是对 **Post-LN** 的改进，作者通过实验证实了 Deep Norm 在训练深层 transformer 模型的时候具备近乎恒定的更新规模，成功训练了 1000 层的 transformer，认为 Deep Norm 在具备 **Post-LN 的良好性能** 的同时又有 **Pre-LN 的稳定训练**
+
+具体它干了两件事情：
+
+1. DeepNorm在进行Layer Norm之前会以 $\alpha$ 参数**扩大残差连接**
+2. 在Xavier参数初始化过程中以 $\beta$​ 减小部分参数的初始化范围
+
+```python
+def deepnorm(x):
+  return LayerNorm(x * alpha + f(x))
+
+def deepnorm_init(w):
+  if w is ["ffn", "v_proj", "out_proj"]:
+    nn.init.xavier_normal_(w, gain=beta)
+  elif w is ["q_proj", "k_proj"]:
+    nn.init.xavier_normal_(w, gain=1)
+```
+
+* 定义了“预期模型更新”的概念表示 模型更新的规模量级
+* 证明了 $W^Q$ 和 $W^K$ 不会改变注意力输出大小数量级的界限，因而 $\alpha$ 并没有缩小这部分参数
+* 模型倾向于*累积每个子层的更新*，从而*导致模型更新量呈爆炸式增长*，从而使*早期优化*变得不稳定
+* 使用 Deep Norm 的 "预期模型更新"，在参数 $\alpha$、$\beta$ 取值适当的时候，以*常数为界*
+
 ## 使用场景
 
-### 为什么 NLP 常用 LN 而不用 BN？
+### 为什么 NLP 常用 LN 而不用 BN
 
 在 NLP 任务中，**序列的长度大小是不相等的**，这就意味着如果我们用 Batch Normalization 处理序列的话，就会**对序列填充的 pad 也进行特征对齐**；其次，不同句子的同一个位置的单词是任意的，对这些同一个位置的单词做 Norm 也是没有意义的。
 
@@ -176,3 +208,32 @@ $$
 
 ***
 
+### 为什么需要仿射参数
+
+$$
+y = \frac{x-E(x)}{\sqrt{Var[X]+\epsilon}}*\gamma+\beta
+$$
+
+在上面的式子中，有可学习的两个参数 $\gamma$ 和 $\beta$ ，核心作用是：**为了保证模型的表达能力不因为规范化而下降**
+
+1. 充分利用下层神经元已经学习的能力：假如没有这组参数，那么下层神经元不论如何变化，其输出的结果在交给上层神经元进行处理之前，都将被粗暴地重新调整到这一固定范围。
+2. 保证获得非线性的表达能力：规范化会将几乎所有数据映射到激活函数的非饱和区（线性区），仅利用到了线性变化能力，从而降低了神经网络的表达能力。而进行再变换，则可以将数据从线性区变换到非线性区，恢复模型的表达能力。
+
+### model.eval() 对 Norm 的影响
+
+先说结论：model.eval() 对 BN、IN 有影响，对 LN、GN 没有影响
+
+* 因为 BN 和 IN 在 pytorch 中有这么一个参数 `track_running_stats`，指的是是否存储一个全局的均值方差，在 model.eval() 执行后，若 `track_running_stats = True`，则会应用全局的均值方差做归一化，不会再额外计算；否则需要重新计算均值方差，重新计算可能会有坏处：测试的 batch_size 和训练的 batch_size 差距过大的时 BN 和 IN 的均值方差计算结果可能会差距很大，对性能可能产生较大的影响
+* 但是 LN 和 GN 在 pytorch 中有这么一句话 `This layer uses statistics computed from input data in both training and evaluation modes.`，说白了就是现场计算均值方差，因为 LN、GN 和 batch_size 无关，所以直接计算就没有什么影响了
+
+引申一个问题：
+
+### model.eval() 和 torch.no_grad() 有什么区别
+
+* model.eval() 的作用是
+  1. 暂停使用 dropout，使用全部的网络参数进行计算
+  2. 暂停计算 BN、IN 等均值方差，使用训练时记录的全局均值方差进行归一化
+  3. model.eval() 不会对梯度造成任何影响
+* torch.no_grad() 的作用仅仅是停止梯度的计算和存储，进一步节省推理显存，**它对 dropout 以及 BN、IN 没有任何影响**，因此为了正确的评估模型，一定要记得使用 model.eval()
+
+ 
