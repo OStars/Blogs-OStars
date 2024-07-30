@@ -202,6 +202,26 @@ llama 中的 FFN 结构如下图所示
 
 2. 上下文窗口从 2048 拓展到了 4096，翻了一倍
 
-3. 采用 **grouped-query attention (GQA)**：相当于在 multi-head attention (MHA) 和 multi-query attention (MQA) 之间平衡了一下。MHA 是独立的 n 个 q、k、v；MQA 是 n 个 q 共享一组 k、v；那么 GQA 就是给 q 分组，例如 8 个头分 4 个组，每两个 q 共享一组 k、v
+3. 采用 **grouped-query attention (GQA)**：相当于在 multi-head attention (MHA) 和 multi-query attention (MQA) 之间平衡了一下。MHA 是独立的 n 个 q、k、v；MQA 是 n 个 q 共享一组 k、v；那么 GQA 就是给 q 分组，例如 8 个头分 4 个组，每两个 q 共享一组 k、v (只有 32b 和 70b 两个版本的才使用了 GQA)
 
    ![image-20240317102039510](assets/image-20240317102039510.png)
+
+**LLaMA 3 和前两代的区别:**
+
+1. llama 1,2 都使用 SentencePiece 进行分词, llama3 使用 openai 的 Tiktoken, 同时引入了 ChatFormat 类、特殊令牌来增强聊天交互和对话处理 => Tiktoken 也是基于 bpe 的分词方法, 但是速度更快, 对 CoreBPE 类用 rust 进行了重写, 包括多线程, regex, cache, 哈希等优化
+
+2. llama3 的词表大小大幅提高, 由 llama1,2 的 32k 提升到了 128k
+
+3. llama3 的训练数据量大幅提高, 达到了 15 万亿 tokens (llama1 => 1.4 万亿左右; llama2 => 2 万亿左右), 同时训练时长大幅增加
+
+4. llama3 支持代码输出, 同时训练数据中有 5% 的非英文数据集, 支持的语言有 30 种左右, 但是效果肯定是英文最好, 不过给其他领域做进一步的语言对齐会更简单了
+
+5. 上下文窗口翻倍, 支持 8k 的上下文窗口
+
+**LLaMA 3.1 新增特性:**
+
+1. llama3.1 新增 function calling 功能
+
+2. 上下文窗口更长, 直接来到了 128k
+
+3. 模型做的更大了, 最大来到了 405B
